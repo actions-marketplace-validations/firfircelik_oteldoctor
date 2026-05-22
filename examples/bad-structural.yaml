@@ -1,0 +1,37 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+  zipkin:
+    endpoint: "0.0.0.0:9411"
+
+processors:
+  batch:
+    timeout: 200ms
+  filter:
+    error_mode: ignore
+
+exporters:
+  otlphttp:
+    endpoint: "https://backend:4318"
+
+extensions:
+  health_check:
+    endpoint: "0.0.0.0:13133"
+
+service:
+  extensions: [health_check, missing_monitor]
+  pipelines:
+    traces:
+      receivers: [otlp, undefined_rcv]
+      processors: [batch]
+      exporters: [otlphttp]
+    metrics:
+      receivers: [otlp]
+      processors: [batch, unknown_proc]
+      exporters: [missing_exp]
+    empty_pipe:
+      receivers: []
+      processors: []
+      exporters: []

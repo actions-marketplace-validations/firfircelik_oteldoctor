@@ -38,27 +38,6 @@ func pipelineLocation(cfg *model.CollectorConfig, pipelineID string) model.Sourc
 	return model.SourceLocation{}
 }
 
-func componentLocation(cfg *model.CollectorConfig, kind model.ComponentKind, id string) model.SourceLocation {
-	var c model.Component
-	var ok bool
-	switch kind {
-	case model.ComponentKindReceiver:
-		c, ok = cfg.Receivers[id]
-	case model.ComponentKindProcessor:
-		c, ok = cfg.Processors[id]
-	case model.ComponentKindExporter:
-		c, ok = cfg.Exporters[id]
-	case model.ComponentKindConnector:
-		c, ok = cfg.Connectors[id]
-	case model.ComponentKindExtension:
-		c, ok = cfg.Extensions[id]
-	}
-	if ok {
-		return c.Location
-	}
-	return model.SourceLocation{}
-}
-
 // --- OTEL-STRUCT-001: Undefined receiver reference ---
 
 type undefinedReceiverRule struct{}
