@@ -1,0 +1,26 @@
+[
+  {
+    "rule_id": "OTEL-REL-201",
+    "severity": "high",
+    "category": "reliability",
+    "message": "Pipeline \"metrics\" references exporter \"also_missing\" which is not defined.",
+    "fix": "Define an exporter named \"also_missing\" or remove the reference.",
+    "location": {
+      "file": "undefined-exporter.yaml",
+      "line": 20,
+      "column": 0
+    }
+  },
+  {
+    "rule_id": "OTEL-REL-201",
+    "severity": "high",
+    "category": "reliability",
+    "message": "Pipeline \"traces\" references exporter \"missing_exporter\" which is not defined.",
+    "fix": "Define an exporter named \"missing_exporter\" or remove the reference.",
+    "location": {
+      "file": "undefined-exporter.yaml",
+      "line": 16,
+      "column": 0
+    }
+  }
+]

@@ -1,0 +1,14 @@
+[
+  {
+    "rule_id": "OTEL-REL-102",
+    "severity": "high",
+    "category": "reliability",
+    "message": "memory_limiter should be the first processor in pipeline \"traces\".",
+    "fix": "Move memory_limiter before batch.",
+    "location": {
+      "file": "memory-limiter-order.yaml",
+      "line": 24,
+      "column": 0
+    }
+  }
+]

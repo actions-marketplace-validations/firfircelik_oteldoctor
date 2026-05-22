@@ -1,0 +1,7 @@
+memory-limiter-order.yaml
+
+HIGH OTEL-REL-102 line 24
+memory_limiter should be the first processor in pipeline "traces".
+Fix: Move memory_limiter before batch.
+
+1 issue found.

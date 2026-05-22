@@ -1,0 +1,35 @@
+receivers:
+  otlp:
+    protocols:
+      grpc: {}
+
+processors:
+  batch: {}
+
+exporters:
+  debug: {}
+
+connectors:
+  count_connector:
+    metrics: {}
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]
+    metrics:
+      receivers: [otlp, count_connector]
+      processors: []
+      exporters: [count_connector, debug]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]
+  extensions: [health_check, pprof]
+  telemetry:
+    logs:
+      level: info
+    metrics:
+      level: detailed

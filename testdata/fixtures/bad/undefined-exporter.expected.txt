@@ -1,0 +1,11 @@
+undefined-exporter.yaml
+
+HIGH OTEL-REL-201 line 20
+Pipeline "metrics" references exporter "also_missing" which is not defined.
+Fix: Define an exporter named "also_missing" or remove the reference.
+
+HIGH OTEL-REL-201 line 16
+Pipeline "traces" references exporter "missing_exporter" which is not defined.
+Fix: Define an exporter named "missing_exporter" or remove the reference.
+
+2 issues found.
