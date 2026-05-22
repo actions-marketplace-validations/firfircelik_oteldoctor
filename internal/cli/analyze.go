@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/firfircelik/oteldoctor/internal/graph"
 	"github.com/firfircelik/oteldoctor/internal/model"
@@ -9,6 +10,7 @@ import (
 	"github.com/firfircelik/oteldoctor/internal/parser"
 	"github.com/firfircelik/oteldoctor/internal/policy"
 	"github.com/firfircelik/oteldoctor/internal/rules"
+	"github.com/firfircelik/oteldoctor/internal/scanner"
 	"github.com/spf13/cobra"
 )
 
@@ -18,13 +20,18 @@ func newAnalyzeCmd() *cobra.Command {
 	var failOn string
 	var policyPath string
 	var showSuppressed bool
+	var recursive bool
+	var include []string
+	var exclude []string
 
 	cmd := &cobra.Command{
 		Use:   "analyze <path>",
 		Short: "Analyze an OpenTelemetry Collector configuration",
 		Long: `analyze parses an OpenTelemetry Collector configuration file and reports
 structural, reliability, security, cost/cardinality, semantic, and
-Kubernetes readiness issues.`,
+Kubernetes readiness issues.
+
+If <path> is a directory, all YAML files are scanned and analyzed.`,
 		Args: cobra.ExactArgs(1),
 		RunE: runAnalyze,
 	}
@@ -34,6 +41,9 @@ Kubernetes readiness issues.`,
 	cmd.Flags().StringVar(&failOn, "fail-on", "", "Exit with code 1 if issues are at or above: critical, high, medium, low")
 	cmd.Flags().StringVar(&policyPath, "policy", "", "Path to policy file (default: discover .oteldoctor.yaml)")
 	cmd.Flags().BoolVar(&showSuppressed, "show-suppressed", false, "Show diagnostics that are suppressed by policy")
+	cmd.Flags().BoolVar(&recursive, "recursive", true, "Recursively scan subdirectories")
+	cmd.Flags().StringArrayVar(&include, "include", nil, "Include files matching glob pattern (can repeat)")
+	cmd.Flags().StringArrayVar(&exclude, "exclude", nil, "Exclude files matching glob pattern (can repeat)")
 
 	return cmd
 }
@@ -67,6 +77,9 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 	failOn, _ := cmd.Flags().GetString("fail-on")
 	policyPath, _ := cmd.Flags().GetString("policy")
 	showSuppressed, _ := cmd.Flags().GetBool("show-suppressed")
+	recursive, _ := cmd.Flags().GetBool("recursive")
+	include, _ := cmd.Flags().GetStringArray("include")
+	exclude, _ := cmd.Flags().GetStringArray("exclude")
 
 	var pol *policy.Policy
 	if policyPath != "" {
@@ -101,27 +114,48 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid --fail-on value %q: must be critical, high, medium, or low", failOn)
 	}
 
-	p := parser.New(path)
-	cfg, err := p.Parse()
+	files, err := resolveFiles(path, recursive, include, exclude)
 	if err != nil {
-		return fmt.Errorf("parse error: %w", err)
+		return fmt.Errorf("scanning: %w", err)
 	}
 
-	g := graph.Build(cfg)
+	if len(files) == 0 {
+		fmt.Fprintln(cmd.OutOrStdout(), "No collector configuration files found.")
+		return nil
+	}
+
+	isSingleFile := !fiIsDir(path)
 
 	reg := rules.NewRegistry()
 	for _, r := range rules.AllRules() {
 		reg.Register(r)
 	}
 
-	ctx := rules.RuleContext{
-		Config:  cfg,
-		Graph:   g,
-		Profile: profile,
-		Policy:  pol,
-	}
+	var allDiags []model.Diagnostic
 
-	diags := reg.RunAll(ctx, showSuppressed)
+	for _, f := range files {
+		p := parser.New(f)
+		cfg, err := p.Parse()
+		if err != nil {
+			if isSingleFile {
+				return fmt.Errorf("parse error: %w", err)
+			}
+			fmt.Fprintf(cmd.ErrOrStderr(), "Warning: skipping %s: %v\n", f, err)
+			continue
+		}
+
+		g := graph.Build(cfg)
+
+		ctx := rules.RuleContext{
+			Config:  cfg,
+			Graph:   g,
+			Profile: profile,
+			Policy:  pol,
+		}
+
+		diags := reg.RunAll(ctx, showSuppressed)
+		allDiags = append(allDiags, diags...)
+	}
 
 	var formatter output.Formatter
 	switch format {
@@ -131,7 +165,7 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 		formatter = &output.TextFormatter{}
 	}
 
-	out, err := formatter.Format(diags)
+	out, err := formatter.Format(allDiags)
 	if err != nil {
 		return fmt.Errorf("formatting output: %w", err)
 	}
@@ -139,7 +173,7 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 	fmt.Fprint(cmd.OutOrStdout(), out)
 
 	hasIssueAtThreshold := false
-	for _, d := range diags {
+	for _, d := range allDiags {
 		if severityInt(d.Severity) <= threshold {
 			hasIssueAtThreshold = true
 			break
@@ -151,4 +185,37 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+func fiIsDir(path string) bool {
+	fi, err := os.Stat(path)
+	return err == nil && fi.IsDir()
+}
+
+func resolveFiles(path string, recursive bool, include, exclude []string) ([]string, error) {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+
+	if !fi.IsDir() {
+		return []string{path}, nil
+	}
+
+	s := scanner.New()
+	s.Recursive = recursive
+	files, err := s.Scan(path)
+	if err != nil {
+		return nil, err
+	}
+
+	files = scanner.FilterByGlob(files, include, false)
+	files = scanner.FilterByGlob(files, exclude, true)
+
+	files, err = scanner.FilterCollectorConfigs(files)
+	if err != nil {
+		return nil, err
+	}
+
+	return files, nil
 }

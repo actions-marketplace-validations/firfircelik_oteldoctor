@@ -1,0 +1,28 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+
+processors:
+  batch:
+    timeout: 200ms
+
+exporters:
+  otlphttp:
+    endpoint: "http://backend.example.com:4318"
+    headers:
+      X-API-KEY: "plaintext-secret-here"
+  debug:
+    verbosity: detailed
+
+extensions:
+  pprof:
+    endpoint: "0.0.0.0:1777"
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp, debug]

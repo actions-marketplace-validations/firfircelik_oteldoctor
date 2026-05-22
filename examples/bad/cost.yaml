@@ -1,0 +1,43 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+
+processors:
+  attributes:
+    actions:
+      - key: http.url
+        action: upsert
+      - key: user.id
+        action: insert
+  transform:
+    metric_statements:
+      - context: metric
+        statements:
+          - set(description, "custom")
+  batch:
+    timeout: 200ms
+
+exporters:
+  debug:
+    verbosity: detailed
+
+connectors:
+  spanmetrics:
+    dimensions:
+      - name: trace_id
+      - name: session.id
+    histogram:
+      explicit: {}
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [attributes, transform, batch]
+      exporters: [debug]
+    metrics:
+      receivers: [otlp, spanmetrics]
+      processors: [batch]
+      exporters: [spanmetrics, debug]

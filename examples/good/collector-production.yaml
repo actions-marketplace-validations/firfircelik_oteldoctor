@@ -1,0 +1,73 @@
+receivers:
+  otlp:
+    tls:
+      cert_file: /tls/cert.pem
+      key_file: /tls/key.pem
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+      http:
+        endpoint: "0.0.0.0:4318"
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+  resource:
+    attributes:
+      - key: service.name
+        value: my-collector
+        action: upsert
+      - key: deployment.environment
+        value: production
+        action: upsert
+      - key: service.version
+        value: 1.2.3
+        action: upsert
+  tailsampling:
+    decision_wait: 10s
+    policies:
+      - name: keep-all
+        type: always_sample
+  batch:
+    timeout: 200ms
+    send_batch_size: 8192
+
+exporters:
+  otlphttp:
+    endpoint: "https://backend.internal:4318"
+    compression: gzip
+    tls:
+      insecure: false
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 30s
+    sending_queue:
+      num_consumers: 10
+      queue_size: 5000
+
+extensions:
+  health_check:
+    endpoint: "localhost:13133"
+  pprof:
+    endpoint: "localhost:1777"
+
+service:
+  extensions: [health_check, pprof]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, tailsampling, batch]
+      exporters: [otlphttp]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [otlphttp]
+  telemetry:
+    logs:
+      level: info
+    metrics:
+      level: detailed
+      address: "localhost:8888"

@@ -112,6 +112,10 @@ func (r *serviceNameMissingRule) Category() model.Category  { return model.Categ
 func (r *serviceNameMissingRule) DefaultSeverity() model.Severity { return model.SeverityLow }
 
 func (r *serviceNameMissingRule) Check(ctx RuleContext) []model.Diagnostic {
+	if ctx.Profile != "production" && ctx.Profile != "staging" {
+		return nil
+	}
+
 	if hasAttributeKey(ctx.Config, "service.name") {
 		return nil
 	}

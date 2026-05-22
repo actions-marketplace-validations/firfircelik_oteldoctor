@@ -280,8 +280,12 @@ func (r *receiverZeroAddrRule) Category() model.Category  { return model.Categor
 func (r *receiverZeroAddrRule) DefaultSeverity() model.Severity { return model.SeverityMedium }
 
 func (r *receiverZeroAddrRule) Check(ctx RuleContext) []model.Diagnostic {
+	if ctx.Profile != "production" {
+		return nil
+	}
+
 	var diags []model.Diagnostic
-	sev := pickSeverity(ctx.Profile, model.SeverityHigh, model.SeverityMedium, model.SeverityMedium)
+	sev := model.SeverityHigh
 
 	for id, c := range ctx.Config.Receivers {
 		pipes := ctx.Graph.PipelinesUsingComponent(model.ComponentKindReceiver, id)
@@ -366,6 +370,9 @@ func (r *debugExtensionExposedRule) Category() model.Category  { return model.Ca
 func (r *debugExtensionExposedRule) DefaultSeverity() model.Severity { return model.SeverityMedium }
 
 func (r *debugExtensionExposedRule) Check(ctx RuleContext) []model.Diagnostic {
+	if ctx.Profile != "production" && ctx.Profile != "staging" {
+		return nil
+	}
 	var diags []model.Diagnostic
 	sev := pickSeverity(ctx.Profile, model.SeverityHigh, model.SeverityMedium, model.SeverityLow)
 
@@ -411,6 +418,10 @@ func (r *tlsMissingExporterRule) Category() model.Category  { return model.Categ
 func (r *tlsMissingExporterRule) DefaultSeverity() model.Severity { return model.SeverityHigh }
 
 func (r *tlsMissingExporterRule) Check(ctx RuleContext) []model.Diagnostic {
+	if ctx.Profile != "production" && ctx.Profile != "staging" {
+		return nil
+	}
+
 	var diags []model.Diagnostic
 	sev := pickSeverity(ctx.Profile, model.SeverityHigh, model.SeverityMedium, model.SeverityMedium)
 

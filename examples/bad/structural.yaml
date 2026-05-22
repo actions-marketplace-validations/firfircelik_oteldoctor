@@ -1,0 +1,52 @@
+receivers:
+  otlp:
+    tls:
+      cert_file: /tls/cert.pem
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+  zipkin:
+    tls:
+      cert_file: /tls/cert.pem
+    endpoint: "0.0.0.0:9411"
+
+processors:
+  resource:
+    attributes:
+      - key: service.name
+        value: "my-service"
+        action: upsert
+  batch:
+    timeout: 200ms
+  filter:
+    error_mode: ignore
+
+exporters:
+  otlphttp:
+    endpoint: "https://backend:4318"
+    tls:
+      insecure: false
+    retry_on_failure:
+      enabled: true
+    sending_queue:
+      num_consumers: 10
+
+extensions:
+  health_check:
+    endpoint: "0.0.0.0:13133"
+
+service:
+  extensions: [health_check, missing_monitor]
+  pipelines:
+    traces:
+      receivers: [otlp, undefined_rcv]
+      processors: [resource, batch]
+      exporters: [otlphttp]
+    metrics:
+      receivers: [otlp]
+      processors: [resource, batch, unknown_proc]
+      exporters: [missing_exp]
+    empty_pipe:
+      receivers: []
+      processors: []
+      exporters: []

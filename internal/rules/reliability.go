@@ -231,10 +231,17 @@ func (r *exporterRetryMissingRule) DefaultSeverity() model.Severity {
 }
 
 func (r *exporterRetryMissingRule) Check(ctx RuleContext) []model.Diagnostic {
+	if ctx.Profile != "production" && ctx.Profile != "staging" {
+		return nil
+	}
+
 	var diags []model.Diagnostic
 	sev := pickSeverity(ctx.Profile, model.SeverityMedium, model.SeverityLow, model.SeverityLow)
 
 	for id, c := range ctx.Config.Exporters {
+		if processorType(id) == "debug" {
+			continue
+		}
 		pipes := ctx.Graph.PipelinesUsingComponent(model.ComponentKindExporter, id)
 		if len(pipes) == 0 {
 			continue
@@ -272,10 +279,17 @@ func (r *exporterQueueMissingRule) DefaultSeverity() model.Severity {
 }
 
 func (r *exporterQueueMissingRule) Check(ctx RuleContext) []model.Diagnostic {
+	if ctx.Profile != "production" && ctx.Profile != "staging" {
+		return nil
+	}
+
 	var diags []model.Diagnostic
 	sev := pickSeverity(ctx.Profile, model.SeverityMedium, model.SeverityLow, model.SeverityLow)
 
 	for id, c := range ctx.Config.Exporters {
+		if processorType(id) == "debug" {
+			continue
+		}
 		pipes := ctx.Graph.PipelinesUsingComponent(model.ComponentKindExporter, id)
 		if len(pipes) == 0 {
 			continue

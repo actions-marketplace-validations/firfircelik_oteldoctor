@@ -49,7 +49,7 @@ func TestServiceNameMissing_NotConfigured(t *testing.T) {
 
 	g := graph.Build(cfg)
 	rule := NewServiceNameMissingRule()
-	diags := rule.Check(RuleContext{Config: cfg, Graph: g})
+	diags := rule.Check(RuleContext{Config: cfg, Graph: g, Profile: "production"})
 
 	if len(diags) != 1 {
 		t.Fatalf("expected 1 diagnostic, got %d", len(diags))

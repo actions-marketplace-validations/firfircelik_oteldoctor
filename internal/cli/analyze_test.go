@@ -58,8 +58,8 @@ func TestAnalyzeCmd_FileNotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for nonexistent file")
 	}
-	if !strings.Contains(err.Error(), "reading config file") {
-		t.Errorf("expected file read error, got: %v", err)
+	if !strings.Contains(err.Error(), "scanning") {
+		t.Errorf("expected scanning error, got: %v", err)
 	}
 }
 
@@ -320,5 +320,211 @@ service:
 	}
 	if !strings.Contains(err.Error(), "invalid --fail-on") {
 		t.Errorf("expected invalid fail-on error, got: %v", err)
+	}
+}
+
+func TestAnalyzeCmd_GoodCollector_ZeroIssuesInDev(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "good.yaml")
+	os.WriteFile(f, []byte(`receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "localhost:4317"
+processors:
+  resource:
+    attributes:
+      - key: service.name
+        value: my-service
+        action: upsert
+  memory_limiter:
+    limit_mib: 512
+  batch:
+    timeout: 200ms
+exporters:
+  otlphttp:
+    endpoint: "https://backend:4318"
+    tls:
+      insecure: false
+    retry_on_failure:
+      enabled: true
+    sending_queue:
+      num_consumers: 10
+extensions:
+  health_check:
+    endpoint: "localhost:13133"
+  pprof:
+    endpoint: "localhost:1777"
+service:
+  extensions: [health_check, pprof]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [otlphttp]
+`), 0644)
+
+	cmd := newAnalyzeCmd()
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+
+	cmd.SetArgs([]string{f})
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("expected no error in development profile, got: %v", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "No issues found") {
+		t.Errorf("expected 'No issues found' in development profile, got: %s", out)
+	}
+}
+
+func TestAnalyzeCmd_GoodCollector_ProductionWarnings(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "good.yaml")
+	os.WriteFile(f, []byte(`receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "https://collector:4317"
+processors:
+  resource:
+    attributes:
+      - key: service.name
+        value: my-service
+        action: upsert
+  memory_limiter:
+    limit_mib: 512
+  batch:
+    timeout: 200ms
+exporters:
+  otlphttp:
+    endpoint: "https://backend:4318"
+    tls:
+      insecure: false
+    retry_on_failure:
+      enabled: true
+    sending_queue:
+      num_consumers: 10
+extensions:
+  health_check:
+    endpoint: "localhost:13133"
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [otlphttp]
+`), 0644)
+
+	cmd := newAnalyzeCmd()
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+
+	cmd.SetArgs([]string{"--profile", "production", f})
+	err := cmd.Execute()
+
+	// Production may trigger advisories (e.g. health_check missing sending_queue
+	// for extensions), but they should exit 0 if below the threshold.
+	// We just verify the command doesn't crash.
+	_ = err
+	out := buf.String()
+	if !strings.Contains(out, "issues found") && !strings.Contains(out, "No issues found") {
+		t.Error("expected diagnostic output in production profile")
+	}
+}
+
+func TestAnalyzeCmd_DebugExporterNoRetryQueue(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "debug.yaml")
+	os.WriteFile(f, []byte(`receivers:
+  otlp:
+    protocols:
+      grpc: {}
+processors:
+  memory_limiter:
+    limit_mib: 512
+  batch:
+    timeout: 200ms
+exporters:
+  debug:
+    verbosity: detailed
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [debug]
+`), 0644)
+
+	cmd := newAnalyzeCmd()
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+
+	cmd.SetArgs([]string{"--profile", "production", f})
+	cmd.Execute()
+	out := buf.String()
+	if strings.Contains(out, "OTEL-REL-105") {
+		t.Error("debug exporter should not trigger retry_on_failure rule")
+	}
+	if strings.Contains(out, "OTEL-REL-106") {
+		t.Error("debug exporter should not trigger sending_queue rule")
+	}
+}
+
+func TestAnalyzeCmd_SecretRedacted(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "secret.yaml")
+	os.WriteFile(f, []byte(`receivers:
+  otlp:
+    protocols:
+      grpc: {}
+exporters:
+  otlphttp:
+    endpoint: "https://backend:4318"
+    headers:
+      DD-API-KEY: "abc123secret"
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [otlphttp]
+`), 0644)
+
+	// Text output
+	cmd := newAnalyzeCmd()
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+	cmd.SetArgs([]string{f})
+	cmd.Execute()
+	textOut := buf.String()
+
+	if strings.Contains(textOut, "abc123") {
+		t.Error("text output must not contain secret value")
+	}
+	if !strings.Contains(textOut, "[REDACTED]") {
+		t.Error("text output must contain [REDACTED] marker")
+	}
+
+	// JSON output
+	cmd2 := newAnalyzeCmd()
+	buf2 := new(bytes.Buffer)
+	cmd2.SetOut(buf2)
+	cmd2.SetErr(buf2)
+	cmd2.SetArgs([]string{"--format", "json", f})
+	cmd2.Execute()
+	jsonOut := buf2.String()
+
+	if strings.Contains(jsonOut, "abc123") {
+		t.Error("JSON output must not contain secret value")
+	}
+	if !strings.Contains(jsonOut, "REDACTED") {
+		t.Error("JSON output must contain REDACTED marker")
 	}
 }

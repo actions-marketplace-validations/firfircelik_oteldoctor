@@ -334,24 +334,24 @@ func TestExporterRetryMissing_Present(t *testing.T) {
 func TestExporterRetryMissing_UnusedExporter(t *testing.T) {
 	cfg := relConfig()
 	setRelReceiver(cfg, "otlp", 2)
-	setRelExporter(cfg, "debug", nil, 10)
-	setRelExporter(cfg, "otlphttp", map[string]any{"endpoint": "https://backend:4318"}, 12)
-	setRelPipeline(cfg, "traces", []string{"otlp"}, nil, []string{"debug"}, 14)
+	setRelExporter(cfg, "otlphttp", map[string]any{"endpoint": "https://backend:4318"}, 10)
+	setRelExporter(cfg, "zipkin", map[string]any{"endpoint": "https://zipkin:9411"}, 12)
+	setRelPipeline(cfg, "traces", []string{"otlp"}, nil, []string{"otlphttp"}, 14)
 
 	g := graph.Build(cfg)
 	rule := NewExporterRetryMissingRule()
-	diags := rule.Check(RuleContext{Config: cfg, Graph: g})
+	diags := rule.Check(RuleContext{Config: cfg, Graph: g, Profile: "production"})
 
 	if len(diags) != 1 {
-		t.Fatalf("expected 1 diagnostic for used debug exporter, got %d", len(diags))
+		t.Fatalf("expected 1 diagnostic for used otlphttp exporter, got %d", len(diags))
 	}
 	if diags[0].Location.Line != 10 {
-		t.Errorf("expected debug exporter line 10, got %d", diags[0].Location.Line)
+		t.Errorf("expected otlphttp exporter line 10, got %d", diags[0].Location.Line)
 	}
 
 	for _, d := range diags {
 		if d.Location.Line == 12 {
-			t.Error("unused otlphttp exporter should not be flagged")
+			t.Error("unused zipkin exporter should not be flagged")
 		}
 	}
 }
