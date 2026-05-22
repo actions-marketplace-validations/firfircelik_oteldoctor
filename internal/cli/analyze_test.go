@@ -90,16 +90,28 @@ func TestAnalyzeCmd_GoodConfig(t *testing.T) {
   otlp:
     protocols:
       grpc:
-        endpoint: "0.0.0.0:4317"
+        endpoint: "localhost:4317"
+        tls:
+          cert_file: /tls/cert.pem
 processors:
-  batch: {}
+  memory_limiter:
+    limit_mib: 512
+  batch:
+    timeout: 200ms
 exporters:
-  debug: {}
+  debug:
+    verbosity: detailed
+    retry_on_failure:
+      enabled: true
+    sending_queue:
+      num_consumers: 10
+    tls:
+      insecure: false
 service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [batch]
+      processors: [memory_limiter, batch]
       exporters: [debug]
 `), 0644)
 
@@ -174,16 +186,29 @@ func TestAnalyzeCmd_JSONFormat(t *testing.T) {
 	os.WriteFile(f, []byte(`receivers:
   otlp:
     protocols:
-      grpc: {}
+      grpc:
+        endpoint: "localhost:4317"
+        tls:
+          cert_file: /tls/cert.pem
 processors:
-  batch: {}
+  memory_limiter:
+    limit_mib: 512
+  batch:
+    timeout: 200ms
 exporters:
-  debug: {}
+  debug:
+    verbosity: detailed
+    retry_on_failure:
+      enabled: true
+    sending_queue:
+      num_consumers: 10
+    tls:
+      insecure: false
 service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [batch]
+      processors: [memory_limiter, batch]
       exporters: [debug]
 `), 0644)
 
