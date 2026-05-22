@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/firfircelik/oteldoctor/internal/extractor"
 	"github.com/firfircelik/oteldoctor/internal/graph"
+	"github.com/firfircelik/oteldoctor/internal/k8s"
 	"github.com/firfircelik/oteldoctor/internal/model"
 	"github.com/firfircelik/oteldoctor/internal/output"
 	"github.com/firfircelik/oteldoctor/internal/parser"
@@ -119,12 +121,28 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("scanning: %w", err)
 	}
 
+	files, displayPaths, err := extractConfigMaps(files)
+	if err != nil {
+		return fmt.Errorf("extracting: %w", err)
+	}
+
+	isSingleFile := !fiIsDir(path)
+
+	var k8sWorkloads []*k8s.Workload
+	var k8sServices []*k8s.ServiceInfo
+
+	if !isSingleFile {
+		k8sWorkloads, k8sServices = parseK8sManifests(files)
+		files, err = scanner.FilterCollectorConfigs(files)
+		if err != nil {
+			return fmt.Errorf("scanning: %w", err)
+		}
+	}
+
 	if len(files) == 0 {
 		fmt.Fprintln(cmd.OutOrStdout(), "No collector configuration files found.")
 		return nil
 	}
-
-	isSingleFile := !fiIsDir(path)
 
 	reg := rules.NewRegistry()
 	for _, r := range rules.AllRules() {
@@ -134,8 +152,19 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 	var allDiags []model.Diagnostic
 
 	for _, f := range files {
-		p := parser.New(f)
-		cfg, err := p.Parse()
+		displayPath := f
+		if dp, ok := displayPaths[f]; ok && dp != f {
+			displayPath = dp
+		}
+
+		p := parser.New(displayPath)
+		var cfg *model.CollectorConfig
+		var err error
+		if displayPath != f {
+			cfg, err = p.ParseFile(f, displayPath)
+		} else {
+			cfg, err = p.Parse()
+		}
 		if err != nil {
 			if isSingleFile {
 				return fmt.Errorf("parse error: %w", err)
@@ -147,10 +176,12 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 		g := graph.Build(cfg)
 
 		ctx := rules.RuleContext{
-			Config:  cfg,
-			Graph:   g,
-			Profile: profile,
-			Policy:  pol,
+			Config:     cfg,
+			Graph:      g,
+			Profile:    profile,
+			Policy:     pol,
+			Workload:   findLinkedWorkload(f, k8sWorkloads),
+			K8sService: findLinkedService(f, k8sServices),
 		}
 
 		diags := reg.RunAll(ctx, showSuppressed)
@@ -212,10 +243,63 @@ func resolveFiles(path string, recursive bool, include, exclude []string) ([]str
 	files = scanner.FilterByGlob(files, include, false)
 	files = scanner.FilterByGlob(files, exclude, true)
 
-	files, err = scanner.FilterCollectorConfigs(files)
-	if err != nil {
-		return nil, err
+	return files, nil
+}
+
+func extractConfigMaps(files []string) ([]string, map[string]string, error) {
+	result := []string{}
+	displayPaths := map[string]string{}
+
+	for _, f := range files {
+		ok, err := extractor.IsConfigMap(f)
+		if err != nil {
+			return nil, nil, fmt.Errorf("checking ConfigMap %s: %w", f, err)
+		}
+		if !ok {
+			result = append(result, f)
+			displayPaths[f] = f
+			continue
+		}
+
+		configs, err := extractor.Extract(f)
+		if err != nil {
+			return nil, nil, fmt.Errorf("extracting ConfigMap %s: %w", f, err)
+		}
+		for _, c := range configs {
+			result = append(result, c.Path)
+			displayPaths[c.Path] = extractor.SourcePathDisplay(c.SourceFile, c.ConfigMapName, c.DataKey)
+		}
 	}
 
-	return files, nil
+	return result, displayPaths, nil
+}
+
+func parseK8sManifests(files []string) ([]*k8s.Workload, []*k8s.ServiceInfo) {
+	var workloads []*k8s.Workload
+	var services []*k8s.ServiceInfo
+
+	for _, f := range files {
+		if w, err := k8s.ParseWorkload(f); err == nil && w != nil {
+			workloads = append(workloads, w)
+		}
+		if svc, err := k8s.ParseService(f); err == nil && svc != nil {
+			services = append(services, svc)
+		}
+	}
+
+	return workloads, services
+}
+
+func findLinkedWorkload(configFile string, workloads []*k8s.Workload) *k8s.Workload {
+	if len(workloads) == 1 {
+		return workloads[0]
+	}
+	return nil
+}
+
+func findLinkedService(configFile string, services []*k8s.ServiceInfo) *k8s.ServiceInfo {
+	if len(services) == 1 {
+		return services[0]
+	}
+	return nil
 }

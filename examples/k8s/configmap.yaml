@@ -7,25 +7,59 @@ data:
   config.yaml: |
     receivers:
       otlp:
+        tls:
+          cert_file: /tls/cert.pem
+          key_file: /tls/key.pem
         protocols:
           grpc:
             endpoint: "0.0.0.0:4317"
 
     processors:
       memory_limiter:
-        limit_mib: 512
+        check_interval: 1s
+        limit_mib: 400
+        spike_limit_mib: 128
+      resource:
+        attributes:
+          - key: service.name
+            value: otel-collector
+            action: upsert
+          - key: deployment.environment
+            value: production
+            action: upsert
+          - key: service.version
+            value: 0.102.0
+            action: upsert
+      tailsampling:
+        decision_wait: 10s
+        policies:
+          - name: keep-all
+            type: always_sample
       batch:
         timeout: 200ms
+        send_batch_size: 8192
 
     exporters:
       otlphttp:
         endpoint: "https://backend:4318"
-      debug:
-        verbosity: detailed
+        tls:
+          insecure: false
+        retry_on_failure:
+          enabled: true
+          initial_interval: 1s
+          max_interval: 30s
+        sending_queue:
+          num_consumers: 10
+          queue_size: 5000
+
+    extensions:
+      health_check:
+        endpoint: "0.0.0.0:13133"
 
     service:
+      extensions: [health_check]
       pipelines:
         traces:
           receivers: [otlp]
-          processors: [memory_limiter, batch]
+          processors: [memory_limiter, resource, tailsampling, batch]
           exporters: [otlphttp]

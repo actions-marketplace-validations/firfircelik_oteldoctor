@@ -28,6 +28,8 @@ spec:
           env:
             - name: OTEL_SERVICE_NAME
               value: otel-collector
+            - name: GOMEMLIMIT
+              value: "400MiB"
           livenessProbe:
             httpGet:
               path: /

@@ -35,5 +35,10 @@ func AllRules() []Rule {
 		NewDeploymentEnvMissingRule(),
 		NewServiceVersionMissingRule(),
 		NewDeprecatedAttributeRule(),
+		NewMemLimiterTooCloseRule(),
+		NewGoMemLimitMissingRule(),
+		NewContainerResourcesMissingRule(),
+		NewK8sProbeMissingRule(),
+		NewLoadBalancerServiceRule(),
 	}
 }

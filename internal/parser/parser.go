@@ -24,6 +24,18 @@ func (p *Parser) Parse() (*model.CollectorConfig, error) {
 	return p.ParseBytes(data)
 }
 
+func (p *Parser) ParseFile(realPath, displayPath string) (*model.CollectorConfig, error) {
+	data, err := os.ReadFile(realPath)
+	if err != nil {
+		return nil, fmt.Errorf("reading config file: %w", err)
+	}
+	saved := p.filePath
+	p.filePath = displayPath
+	cfg, err := p.ParseBytes(data)
+	p.filePath = saved
+	return cfg, err
+}
+
 func (p *Parser) ParseBytes(data []byte) (*model.CollectorConfig, error) {
 	var doc yaml.Node
 	if err := yaml.Unmarshal(data, &doc); err != nil {
