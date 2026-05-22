@@ -1,0 +1,46 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+  jaeger:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:14250"
+
+processors:
+  memory_limiter:
+    limit_mib: 512
+  batch:
+    timeout: 200ms
+
+exporters:
+  otlphttp:
+    endpoint: "https://backend:4318"
+  debug:
+    verbosity: detailed
+
+extensions:
+  health_check:
+    endpoint: "0.0.0.0:13133"
+  pprof:
+    endpoint: "0.0.0.0:1777"
+
+connectors:
+  count_connector:
+    metrics: {}
+
+service:
+  extensions: [health_check, pprof]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp]
+    metrics:
+      receivers: [jaeger, count_connector]
+      processors: [memory_limiter]
+      exporters: [count_connector, debug]
+  telemetry:
+    logs:
+      level: info

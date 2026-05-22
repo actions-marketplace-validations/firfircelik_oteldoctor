@@ -245,16 +245,33 @@ func (p *Parser) parsePipeline(signalType model.SignalType, node *yaml.Node) (mo
 
 func (p *Parser) parseStringArray(node *yaml.Node) ([]string, error) {
 	if node.Kind != yaml.SequenceNode {
-		return nil, fmt.Errorf("expected a sequence, got kind %d", node.Kind)
+		return nil, fmt.Errorf("expected a sequence, got %s", kindName(node.Kind))
 	}
 
 	var result []string
 	for _, item := range node.Content {
 		if item.Kind != yaml.ScalarNode {
-			return nil, fmt.Errorf("expected a string value, got kind %d", item.Kind)
+			return nil, fmt.Errorf("expected a string value, got %s", kindName(item.Kind))
 		}
 		result = append(result, item.Value)
 	}
 
 	return result, nil
+}
+
+func kindName(k yaml.Kind) string {
+	switch k {
+	case yaml.ScalarNode:
+		return "scalar"
+	case yaml.SequenceNode:
+		return "sequence"
+	case yaml.MappingNode:
+		return "mapping"
+	case yaml.DocumentNode:
+		return "document"
+	case yaml.AliasNode:
+		return "alias"
+	default:
+		return "unknown"
+	}
 }

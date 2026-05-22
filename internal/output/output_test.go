@@ -160,7 +160,7 @@ func TestTextFormatter_GroupedByFile(t *testing.T) {
 		t.Errorf("expected a.yaml header once (grouped), got %d", countA)
 	}
 
-	if !strings.Contains(out, "R1") && strings.Contains(out, "R3") {
+	if !strings.Contains(out, "R1") || !strings.Contains(out, "R3") {
 		t.Error("expected both R1 and R3 under a.yaml group")
 	}
 }
