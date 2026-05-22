@@ -30,5 +30,10 @@ func AllRules() []Rule {
 		NewSpanmetricsDimensionsRule(),
 		NewDebugExporterVolumeRule(),
 		NewTracesNoSamplingRule(),
+		NewServiceNameMissingRule(),
+		NewLegacyServiceNameRule(),
+		NewDeploymentEnvMissingRule(),
+		NewServiceVersionMissingRule(),
+		NewDeprecatedAttributeRule(),
 	}
 }

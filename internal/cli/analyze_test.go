@@ -94,6 +94,11 @@ func TestAnalyzeCmd_GoodConfig(t *testing.T) {
         tls:
           cert_file: /tls/cert.pem
 processors:
+  resource:
+    attributes:
+      - key: service.name
+        value: my-service
+        action: upsert
   memory_limiter:
     limit_mib: 512
   batch:
@@ -111,7 +116,7 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, batch]
+      processors: [memory_limiter, resource, batch]
       exporters: [debug]
 `), 0644)
 
@@ -191,6 +196,11 @@ func TestAnalyzeCmd_JSONFormat(t *testing.T) {
         tls:
           cert_file: /tls/cert.pem
 processors:
+  resource:
+    attributes:
+      - key: service.name
+        value: my-service
+        action: upsert
   memory_limiter:
     limit_mib: 512
   batch:
@@ -208,7 +218,7 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, batch]
+      processors: [memory_limiter, resource, batch]
       exporters: [debug]
 `), 0644)
 
