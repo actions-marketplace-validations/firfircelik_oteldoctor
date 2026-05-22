@@ -13,8 +13,8 @@ func TestRootCmd_Defaults(t *testing.T) {
 		t.Errorf("expected Use 'oteldoctor', got '%s'", cmd.Use)
 	}
 
-	if len(cmd.Commands()) != 2 {
-		t.Errorf("expected 2 subcommands, got %d", len(cmd.Commands()))
+	if len(cmd.Commands()) != 3 {
+		t.Errorf("expected 3 subcommands, got %d", len(cmd.Commands()))
 	}
 
 	names := make(map[string]bool)
