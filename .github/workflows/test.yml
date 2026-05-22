@@ -9,36 +9,63 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
           go-version: "1.23"
-      - name: Tidy modules
-        run: go mod tidy
-      - name: Check diff
-        run: git diff --exit-code
-      - name: Vet
-        run: go vet ./...
-      - name: Test
-        run: go test -count=1 ./...
-      - name: Test race
+          cache: true
+
+      - name: Verify go.mod is tidy
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: Run tests
         run: go test -race -count=1 ./...
-      - name: Build
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Build binary
         run: go build -o bin/oteldoctor ./cmd/oteldoctor
-      - name: Smoke — good dev config
+
+      - name: Smoke test good config
         run: ./bin/oteldoctor analyze examples/good/collector-dev.yaml
-      - name: Smoke — good production config
+
+      - name: Smoke test production config
         run: ./bin/oteldoctor analyze --profile production examples/good/collector-production.yaml
-      - name: Smoke — bad structural
-        run: ./bin/oteldoctor analyze --fail-on critical examples/bad/structural.yaml
-      - name: Smoke — JSON output
-        run: ./bin/oteldoctor analyze --format json examples/good/collector-dev.yaml
-      - name: Smoke — SARIF output
-        run: ./bin/oteldoctor analyze --format sarif examples/bad/security.yaml
-      - name: Smoke — version
-        run: ./bin/oteldoctor version
-      - name: Smoke — explain
-        run: ./bin/oteldoctor explain OTEL-REL-102
-      - name: Smoke — graph
-        run: ./bin/oteldoctor graph examples/good/collector-dev.yaml --format mermaid
+
+      - name: Smoke test bad config should fail
+        run: |
+          set +e
+          ./bin/oteldoctor analyze --fail-on critical examples/bad/structural.yaml
+          status=$?
+          set -e
+
+          if [ "$status" -eq 0 ]; then
+            echo "Expected bad structural config to fail with --fail-on critical, but it passed"
+            exit 1
+          fi
+
+          if [ "$status" -ne 1 ]; then
+            echo "Expected exit code 1 for diagnostics above threshold, got $status"
+            exit 1
+          fi
+
+      - name: Smoke test JSON output
+        run: ./bin/oteldoctor analyze --profile production --format json examples/bad/security.yaml
+
+      - name: Smoke test SARIF output
+        run: ./bin/oteldoctor analyze --profile production --format sarif examples/bad/security.yaml
+
+      - name: Smoke test graph command
+        run: ./bin/oteldoctor graph examples/good/collector-production.yaml --format mermaid
+
+      - name: Smoke test explain command
+        run: ./bin/oteldoctor explain OTEL-SEC-202
+
+      - name: Smoke test autofix dry-run
+        run: ./bin/oteldoctor fix examples/bad/reliability.yaml --dry-run
