@@ -14,16 +14,31 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.23"
-      - name: Run tests
+      - name: Tidy modules
+        run: go mod tidy
+      - name: Check diff
+        run: git diff --exit-code
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test -count=1 ./...
+      - name: Test race
         run: go test -race -count=1 ./...
-      - name: Build binary
+      - name: Build
         run: go build -o bin/oteldoctor ./cmd/oteldoctor
-      - name: Smoke test (good config)
-        run: |
-          ./bin/oteldoctor analyze examples/good/collector-dev.yaml
-      - name: Smoke test (bad config, fail-on critical)
-        run: |
-          ./bin/oteldoctor analyze --fail-on critical examples/bad/structural.yaml
-      - name: Smoke test (production config)
-        run: |
-          ./bin/oteldoctor analyze --profile production examples/good/collector-production.yaml
+      - name: Smoke — good dev config
+        run: ./bin/oteldoctor analyze examples/good/collector-dev.yaml
+      - name: Smoke — good production config
+        run: ./bin/oteldoctor analyze --profile production examples/good/collector-production.yaml
+      - name: Smoke — bad structural
+        run: ./bin/oteldoctor analyze --fail-on critical examples/bad/structural.yaml
+      - name: Smoke — JSON output
+        run: ./bin/oteldoctor analyze --format json examples/good/collector-dev.yaml
+      - name: Smoke — SARIF output
+        run: ./bin/oteldoctor analyze --format sarif examples/bad/security.yaml
+      - name: Smoke — version
+        run: ./bin/oteldoctor version
+      - name: Smoke — explain
+        run: ./bin/oteldoctor explain OTEL-REL-102
+      - name: Smoke — graph
+        run: ./bin/oteldoctor graph examples/good/collector-dev.yaml --format mermaid

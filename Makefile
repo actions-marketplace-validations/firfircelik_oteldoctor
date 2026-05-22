@@ -1,4 +1,4 @@
-.PHONY: build test lint clean
+.PHONY: build test clean
 
 BINARY := oteldoctor
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "0.1.0-dev")
@@ -11,9 +11,6 @@ build:
 
 test:
 	go test -race -count=1 ./...
-
-lint:
-	@echo "lint: not implemented"
 
 clean:
 	rm -rf bin/

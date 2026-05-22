@@ -1,5 +1,9 @@
 # oteldoctor
 
+[![test](https://github.com/firfircelik/oteldoctor/actions/workflows/test.yml/badge.svg)](https://github.com/firfircelik/oteldoctor/actions/workflows/test.yml)
+[![Go version](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go)](https://go.dev)
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A production-readiness analyzer for OpenTelemetry Collector configurations.
 
 ## What oteldoctor is
@@ -15,13 +19,25 @@ oteldoctor scans OpenTelemetry Collector YAML configurations and reports issues 
 | **Semantic Quality** | Deprecated attributes, missing service.name or deployment.environment |
 | **Kubernetes Readiness** | GOMEMLIMIT, resource limits, probes, LoadBalancer exposure |
 
+## Why oteldoctor?
+
+The OpenTelemetry Collector validates whether a config is syntactically valid and can start. oteldoctor goes further — it asks whether your config is production-ready.
+
+- **Before deploying:** catch reliability gaps, security risks, and cost pitfalls that the Collector itself won't flag.
+- **In CI:** block merges when critical issues are introduced, with SARIF output for GitHub Code Scanning.
+- **For teams:** enforce consistent semantic conventions and Kubernetes best practices across services.
+
 ## What oteldoctor is not
 
-oteldoctor does **not** replace the OpenTelemetry Collector's own configuration validation. The Collector can tell you whether a config is syntactically valid. oteldoctor focuses on production readiness: reliability, security, cost, semantic quality, and Kubernetes deployment best practices.
+oteldoctor does **not** replace the Collector's own configuration validation. It checks production readiness: reliability, security, cost, semantic quality, and Kubernetes deployment best practices.
 
 ## Installation
 
 ```bash
+# Install latest release
+go install github.com/firfircelik/oteldoctor/cmd/oteldoctor@v0.1.0
+
+# Or install latest commit
 go install github.com/firfircelik/oteldoctor/cmd/oteldoctor@latest
 ```
 
@@ -49,12 +65,12 @@ oteldoctor analyze --profile production ./deploy/
 # JSON output (stable for CI diffing)
 oteldoctor analyze --format json config.yaml
 
-# SARIF output (GitHub Code Scanning)
-oteldoctor analyze --format sarif ./deploy/
+# SARIF output for GitHub Code Scanning
+oteldoctor analyze --format sarif ./deploy/ > oteldoctor.sarif
 
 # Auto-fix safe issues (dry-run by default)
-oteldoctor fix config.yaml --dry-run
-oteldoctor fix config.yaml --write
+oteldoctor fix config.yaml
+oteldoctor fix --write config.yaml
 
 # Render pipeline graph
 oteldoctor graph config.yaml --format mermaid
@@ -63,9 +79,17 @@ oteldoctor graph config.yaml --format mermaid
 oteldoctor explain OTEL-REL-102
 ```
 
-## Example: bad config and output
+## Exit codes
 
-Given a config with undefined references:
+| Code | Meaning |
+|---|---|
+| 0 | No issues found, or all issues below `--fail-on` threshold |
+| 1 | Issues found at or above the `--fail-on` threshold |
+| 2 | Parse error, config error, or runtime error |
+
+Use `--fail-on critical` to exit 0 unless critical issues exist. Use `--fail-on low` (default) to fail on any issue.
+
+## Example: bad config and output
 
 ```yaml
 # collector.yaml
@@ -81,9 +105,9 @@ service:
       exporters: [debug, no_such_exp]
 ```
 
-Running `oteldoctor analyze collector.yaml` produces:
-
 ```
+$ oteldoctor analyze collector.yaml
+
 collector.yaml
 
 CRITICAL OTEL-STRUCT-001 line 7
@@ -114,7 +138,7 @@ oteldoctor ships with 38 rules across 6 categories:
  5 kubernetes    (OTEL-K8S-501  – OTEL-K8S-505)
 ```
 
-Use `oteldoctor explain <RULE_ID>` to see documentation for any rule.
+See [docs/rules.md](docs/rules.md) for the complete rules reference. Use `oteldoctor explain <RULE_ID>` for detailed documentation on any rule.
 
 ## Policy file
 
@@ -138,48 +162,57 @@ Policy files are discovered automatically (walking up from the current directory
 
 ## GitHub Action
 
+Using the composite action:
+
 ```yaml
-name: oteldoctor scan
-on: [push, pull_request]
-jobs:
-  scan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.23"
-      - uses: firfircelik/oteldoctor@main
-        with:
-          path: ./deploy
-          profile: production
-          format: sarif
-      - uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: oteldoctor.sarif
+- uses: firfircelik/oteldoctor@v0.1.0
+  with:
+    path: ./deploy
+    profile: production
+    format: sarif
+```
+
+Or using `go install` in a workflow step:
+
+```yaml
+- uses: actions/setup-go@v5
+  with:
+    go-version: "1.23"
+- run: go install github.com/firfircelik/oteldoctor/cmd/oteldoctor@v0.1.0
+- run: oteldoctor analyze --profile production --format sarif ./deploy/ > oteldoctor.sarif
+- uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: oteldoctor.sarif
 ```
 
 See [docs/github-action.md](docs/github-action.md) for full documentation.
 
 ## Graph command
 
-Visualize your collector pipeline:
-
 ```bash
 oteldoctor graph config.yaml --format mermaid
 ```
 
-Produces a [Mermaid.js](https://mermaid.js.org) flowchart showing receivers → processors → exporters per signal. Also supports `--format dot` (Graphviz) and `--format json`.
+Produces a Mermaid.js flowchart showing receivers → processors → exporters per signal. Also supports `--format dot` (Graphviz) and `--format json`.
 
 ## Explain command
-
-Get detailed documentation for any rule:
 
 ```bash
 oteldoctor explain OTEL-REL-102
 ```
 
-Shows title, category, severity, explanation, bad/good examples, and fix instructions.
+Shows title, category, severity, why the rule matters, bad/good examples, and fix instructions.
+
+## Autofix
+
+```bash
+oteldoctor fix config.yaml          # dry-run (default), shows unified diff
+oteldoctor fix config.yaml --write  # applies the fix to the file
+```
+
+Currently supports one safe fix: **OTEL-REL-102** (reorder memory_limiter to first position in processor chain). Other rules provide fix suggestions in diagnostic output but are not automatically applied.
+
+**Important:** `--write` may change YAML formatting (indentation style, comments). Always review the `--dry-run` diff before writing. For version-controlled configs, commit or stash changes before running `--write`.
 
 ## Example configurations
 
@@ -205,9 +238,10 @@ examples/
 ```bash
 make build     # go build -o bin/oteldoctor ./cmd/oteldoctor
 make test      # go test -race -count=1 ./...
-make lint      # placeholder (not implemented)
 make clean     # rm -rf bin/
 ```
+
+See [docs/roadmap.md](docs/roadmap.md) for planned features and [docs/rules.md](docs/rules.md) for the complete rules reference.
 
 ## Disclaimer
 
