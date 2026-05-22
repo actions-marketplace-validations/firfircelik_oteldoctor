@@ -38,7 +38,7 @@ If <path> is a directory, all YAML files are scanned and analyzed.`,
 		RunE: runAnalyze,
 	}
 
-	cmd.Flags().StringVarP(&format, "format", "f", "text", "Output format: text, json")
+	cmd.Flags().StringVarP(&format, "format", "f", "text", "Output format: text, json, sarif")
 	cmd.Flags().StringVar(&profile, "profile", "", "Analysis profile: development, staging, production")
 	cmd.Flags().StringVar(&failOn, "fail-on", "", "Exit with code 1 if issues are at or above: critical, high, medium, low")
 	cmd.Flags().StringVar(&policyPath, "policy", "", "Path to policy file (default: discover .oteldoctor.yaml)")
@@ -192,6 +192,8 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 	switch format {
 	case "json":
 		formatter = &output.JSONFormatter{}
+	case "sarif":
+		formatter = &output.SARIFFormatter{}
 	default:
 		formatter = &output.TextFormatter{}
 	}

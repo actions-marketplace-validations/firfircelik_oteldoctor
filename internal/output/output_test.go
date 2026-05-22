@@ -399,3 +399,125 @@ func TestTextFormatter_CrossFileSeverityOrder(t *testing.T) {
 		t.Error("CRITICAL should appear before LOW")
 	}
 }
+
+func TestSARIFFormatter_ValidShape(t *testing.T) {
+	f := &SARIFFormatter{}
+	diags := []model.Diagnostic{
+		{
+			RuleID:   "OTEL-REL-102",
+			Severity: model.SeverityHigh,
+			Category: model.CategoryReliability,
+			Message:  "memory_limiter should be first processor.",
+			Fix:      "Move memory_limiter before batch.",
+			Location: model.SourceLocation{File: "collector.yaml", Line: 42, Column: 5},
+		},
+		{
+			RuleID:   "OTEL-SEC-202",
+			Severity: model.SeverityCritical,
+			Category: model.CategorySecurity,
+			Message:  "Hardcoded secret in headers.",
+			Location: model.SourceLocation{File: "collector.yaml", Line: 10},
+		},
+	}
+
+	out, err := f.Format(diags)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var log map[string]any
+	if err := json.Unmarshal([]byte(out), &log); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, out)
+	}
+
+	if v, _ := log["version"].(string); v != "2.1.0" {
+		t.Errorf("expected version 2.1.0, got %q", v)
+	}
+
+	runs, ok := log["runs"].([]any)
+	if !ok || len(runs) != 1 {
+		t.Fatal("expected 1 run")
+	}
+
+	run, _ := runs[0].(map[string]any)
+
+	tool, ok := run["tool"].(map[string]any)
+	if !ok {
+		t.Fatal("expected tool section")
+	}
+	driver, _ := tool["driver"].(map[string]any)
+	if driver["name"] != "oteldoctor" {
+		t.Error("expected driver name oteldoctor")
+	}
+
+	rules, _ := driver["rules"].([]any)
+	if len(rules) != 2 {
+		t.Errorf("expected 2 rules, got %d", len(rules))
+	}
+
+	results, _ := run["results"].([]any)
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+
+	r0 := results[0].(map[string]any)
+	if r0["ruleId"] != "OTEL-SEC-202" {
+		t.Errorf("expected first result OTEL-SEC-202 (sorted critical), got %v", r0["ruleId"])
+	}
+	if r0["level"] != "error" {
+		t.Errorf("expected error level for critical, got %v", r0["level"])
+	}
+
+	locs, _ := r0["locations"].([]any)
+	if len(locs) == 0 {
+		t.Fatal("expected locations")
+	}
+	loc := locs[0].(map[string]any)
+	pl := loc["physicalLocation"].(map[string]any)
+	al := pl["artifactLocation"].(map[string]any)
+	if al["uri"] != "collector.yaml" {
+		t.Errorf("expected uri collector.yaml, got %v", al["uri"])
+	}
+	region, _ := pl["region"].(map[string]any)
+	if int(region["startLine"].(float64)) != 10 {
+		t.Errorf("expected startLine 10, got %v", region["startLine"])
+	}
+}
+
+func TestSARIFFormatter_Empty(t *testing.T) {
+	f := &SARIFFormatter{}
+	out, err := f.Format(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var log map[string]any
+	json.Unmarshal([]byte(out), &log)
+
+	runs, _ := log["runs"].([]any)
+	run := runs[0].(map[string]any)
+	results, _ := run["results"].([]any)
+	if len(results) != 0 {
+		t.Errorf("expected 0 results, got %d", len(results))
+	}
+}
+
+func TestSARIFFormatter_NoLocation(t *testing.T) {
+	f := &SARIFFormatter{}
+	diags := []model.Diagnostic{
+		{
+			RuleID:   "OTEL-SEM-401",
+			Severity: model.SeverityLow,
+			Message:  "service.name not configured.",
+		},
+	}
+
+	out, err := f.Format(diags)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(out, "\"results\"") {
+		t.Error("should have results even without locations")
+	}
+}

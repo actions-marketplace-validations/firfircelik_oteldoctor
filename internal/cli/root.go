@@ -27,7 +27,9 @@ and Kubernetes readiness issues and reports them with actionable guidance.`,
 	}
 
 	cmd.AddCommand(newAnalyzeCmd())
+	cmd.AddCommand(newExplainCmd())
 	cmd.AddCommand(newFixCmd())
+	cmd.AddCommand(newGraphCmd())
 	cmd.AddCommand(newVersionCmd())
 
 	return cmd
