@@ -25,5 +25,10 @@ func AllRules() []Rule {
 		NewDebugExtensionExposedRule(),
 		NewTLSMissingExporterRule(),
 		NewAuthExtensionNotEnabledRule(),
+		NewHighCardinalityMetricRule(),
+		NewDynamicAttributesRule(),
+		NewSpanmetricsDimensionsRule(),
+		NewDebugExporterVolumeRule(),
+		NewTracesNoSamplingRule(),
 	}
 }
