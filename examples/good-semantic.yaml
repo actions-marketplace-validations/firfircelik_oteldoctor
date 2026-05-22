@@ -1,0 +1,27 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+
+processors:
+  resource:
+    attributes:
+      - key: service.name
+        value: "my-service"
+        action: upsert
+  memory_limiter:
+    limit_mib: 512
+  batch:
+    timeout: 200ms
+
+exporters:
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [debug]

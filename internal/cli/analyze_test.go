@@ -42,8 +42,8 @@ func TestAnalyzeCmd_FailOnFlag(t *testing.T) {
 	if flag == nil {
 		t.Fatal("expected 'fail-on' flag")
 	}
-	if flag.DefValue != "low" {
-		t.Errorf("expected default value 'low', got '%s'", flag.DefValue)
+	if flag.DefValue != "" {
+		t.Errorf("expected default value '', got '%s'", flag.DefValue)
 	}
 }
 

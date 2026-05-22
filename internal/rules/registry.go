@@ -24,11 +24,16 @@ func (r *Registry) Rules() []Rule {
 	return result
 }
 
-func (r *Registry) RunAll(ctx RuleContext) []model.Diagnostic {
+func (r *Registry) RunAll(ctx RuleContext, showSuppressed bool) []model.Diagnostic {
 	var all []model.Diagnostic
 
 	for _, rule := range r.rules {
+		if ctx.Policy != nil && ctx.Policy.IsRuleDisabled(rule.ID()) {
+			continue
+		}
+
 		diags := rule.Check(ctx)
+
 		for i := range diags {
 			if diags[i].Severity == "" {
 				diags[i].Severity = rule.DefaultSeverity()
@@ -39,12 +44,48 @@ func (r *Registry) RunAll(ctx RuleContext) []model.Diagnostic {
 			if diags[i].RuleID == "" {
 				diags[i].RuleID = rule.ID()
 			}
+
+			if ctx.Policy != nil {
+				if sev, ok := ctx.Policy.RuleSeverity(rule.ID()); ok && sev != "off" {
+					if override, ok := parseSeverity(sev); ok {
+						diags[i].Severity = override
+					}
+				}
+			}
 		}
+
+		if !showSuppressed {
+			filtered := diags[:0]
+			for _, d := range diags {
+				if _, suppressed := ctx.Policy.IsSuppressed(d.RuleID, d.Location.File); !suppressed {
+					filtered = append(filtered, d)
+				}
+			}
+			diags = filtered
+		}
+
 		all = append(all, diags...)
 	}
 
 	sort.Stable(diagnosticSlice(all))
 	return all
+}
+
+func parseSeverity(s string) (model.Severity, bool) {
+	switch s {
+	case "critical":
+		return model.SeverityCritical, true
+	case "high":
+		return model.SeverityHigh, true
+	case "medium":
+		return model.SeverityMedium, true
+	case "low":
+		return model.SeverityLow, true
+	case "info":
+		return model.SeverityInfo, true
+	default:
+		return "", false
+	}
 }
 
 type diagnosticSlice []model.Diagnostic

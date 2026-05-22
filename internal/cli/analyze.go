@@ -7,6 +7,7 @@ import (
 	"github.com/firfircelik/oteldoctor/internal/model"
 	"github.com/firfircelik/oteldoctor/internal/output"
 	"github.com/firfircelik/oteldoctor/internal/parser"
+	"github.com/firfircelik/oteldoctor/internal/policy"
 	"github.com/firfircelik/oteldoctor/internal/rules"
 	"github.com/spf13/cobra"
 )
@@ -15,6 +16,8 @@ func newAnalyzeCmd() *cobra.Command {
 	var format string
 	var profile string
 	var failOn string
+	var policyPath string
+	var showSuppressed bool
 
 	cmd := &cobra.Command{
 		Use:   "analyze <path>",
@@ -27,8 +30,10 @@ Kubernetes readiness issues.`,
 	}
 
 	cmd.Flags().StringVarP(&format, "format", "f", "text", "Output format: text, json")
-	cmd.Flags().StringVar(&profile, "profile", "development", "Analysis profile: development, staging, production")
-	cmd.Flags().StringVar(&failOn, "fail-on", "low", "Exit with code 1 if issues are at or above: critical, high, medium, low")
+	cmd.Flags().StringVar(&profile, "profile", "", "Analysis profile: development, staging, production")
+	cmd.Flags().StringVar(&failOn, "fail-on", "", "Exit with code 1 if issues are at or above: critical, high, medium, low")
+	cmd.Flags().StringVar(&policyPath, "policy", "", "Path to policy file (default: discover .oteldoctor.yaml)")
+	cmd.Flags().BoolVar(&showSuppressed, "show-suppressed", false, "Show diagnostics that are suppressed by policy")
 
 	return cmd
 }
@@ -60,6 +65,36 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 	format, _ := cmd.Flags().GetString("format")
 	profile, _ := cmd.Flags().GetString("profile")
 	failOn, _ := cmd.Flags().GetString("fail-on")
+	policyPath, _ := cmd.Flags().GetString("policy")
+	showSuppressed, _ := cmd.Flags().GetBool("show-suppressed")
+
+	var pol *policy.Policy
+	if policyPath != "" {
+		var err error
+		pol, err = policy.Load(policyPath)
+		if err != nil {
+			return fmt.Errorf("loading policy: %w", err)
+		}
+	} else {
+		p, err := policy.Discover(".")
+		if err == nil {
+			pol = p
+		}
+	}
+
+	if profile == "" && pol != nil && pol.Profile != "" {
+		profile = pol.Profile
+	}
+	if profile == "" {
+		profile = "development"
+	}
+
+	if failOn == "" && pol != nil && pol.FailOn != "" {
+		failOn = pol.FailOn
+	}
+	if failOn == "" {
+		failOn = "low"
+	}
 
 	threshold, ok := failRank[failOn]
 	if !ok {
@@ -83,9 +118,10 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 		Config:  cfg,
 		Graph:   g,
 		Profile: profile,
+		Policy:  pol,
 	}
 
-	diags := reg.RunAll(ctx)
+	diags := reg.RunAll(ctx, showSuppressed)
 
 	var formatter output.Formatter
 	switch format {

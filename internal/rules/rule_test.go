@@ -78,7 +78,7 @@ func TestRegistry_RunAll_ReturnsDiagnostics(t *testing.T) {
 		Graph:  &graph.Graph{},
 	}
 
-	diags := reg.RunAll(ctx)
+	diags := reg.RunAll(ctx, false)
 	if len(diags) != 1 {
 		t.Fatalf("expected 1 diagnostic, got %d", len(diags))
 	}
@@ -116,7 +116,7 @@ func TestRegistry_RunAll_FillsDefaults(t *testing.T) {
 	diags := reg.RunAll(RuleContext{
 		Config: &model.CollectorConfig{},
 		Graph:  &graph.Graph{},
-	})
+	}, false)
 
 	if len(diags) != 1 {
 		t.Fatalf("expected 1 diagnostic, got %d", len(diags))
@@ -155,7 +155,7 @@ func TestRegistry_RunAll_PreservesExplicitValues(t *testing.T) {
 	diags := reg.RunAll(RuleContext{
 		Config: &model.CollectorConfig{},
 		Graph:  &graph.Graph{},
-	})
+	}, false)
 
 	d := diags[0]
 	if d.RuleID != "OTEL-OVERRIDE" {
@@ -205,7 +205,7 @@ func TestRegistry_RunAll_SeveritySorting(t *testing.T) {
 	diags := reg.RunAll(RuleContext{
 		Config: &model.CollectorConfig{},
 		Graph:  &graph.Graph{},
-	})
+	}, false)
 
 	if len(diags) != 3 {
 		t.Fatalf("expected 3 diagnostics, got %d", len(diags))
@@ -250,7 +250,7 @@ func TestRegistry_RunAll_MultipleRulesMultipleDiagnostics(t *testing.T) {
 	diags := reg.RunAll(RuleContext{
 		Config: &model.CollectorConfig{},
 		Graph:  &graph.Graph{},
-	})
+	}, false)
 
 	if len(diags) != 3 {
 		t.Fatalf("expected 3 diagnostics, got %d", len(diags))
@@ -271,7 +271,7 @@ func TestRegistry_RunAll_EmptyRegistry(t *testing.T) {
 	diags := reg.RunAll(RuleContext{
 		Config: &model.CollectorConfig{},
 		Graph:  &graph.Graph{},
-	})
+	}, false)
 
 	if len(diags) != 0 {
 		t.Errorf("expected 0 diagnostics from empty registry, got %d", len(diags))
@@ -305,7 +305,7 @@ func TestRegistry_RunAll_RuleReceivesContext(t *testing.T) {
 		Config:  cfg,
 		Graph:   g,
 		Profile: "production",
-	})
+	}, false)
 
 	_ = diags
 	_ = capturedCtx
