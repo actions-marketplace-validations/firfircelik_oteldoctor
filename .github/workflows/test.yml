@@ -9,63 +9,102 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-go@v5
         with:
           go-version: "1.23"
-          cache: true
 
-      - name: Verify go.mod is tidy
-        run: |
-          go mod tidy
-          git diff --exit-code go.mod go.sum
+      - name: Tidy modules
+        run: go mod tidy
 
-      - name: Run tests
-        run: go test -race -count=1 ./...
+      - name: Check module diff
+        run: git diff --exit-code go.mod go.sum
 
-      - name: Run go vet
+      - name: Vet
         run: go vet ./...
 
-      - name: Build binary
+      - name: Test
+        run: go test -count=1 ./...
+
+      - name: Test race
+        run: go test -race -count=1 ./...
+
+      - name: Build
         run: go build -o bin/oteldoctor ./cmd/oteldoctor
 
-      - name: Smoke test good config
+      - name: Smoke — good dev config (expect 0)
         run: ./bin/oteldoctor analyze examples/good/collector-dev.yaml
 
-      - name: Smoke test production config
+      - name: Smoke — good production config (expect 0)
         run: ./bin/oteldoctor analyze --profile production examples/good/collector-production.yaml
 
-      - name: Smoke test bad config should fail
+      - name: Smoke — bad config with fail-on critical (expect 1)
+        shell: bash
         run: |
           set +e
           ./bin/oteldoctor analyze --fail-on critical examples/bad/structural.yaml
-          status=$?
-          set -e
-
-          if [ "$status" -eq 0 ]; then
-            echo "Expected bad structural config to fail with --fail-on critical, but it passed"
+          ec=$?
+          if [ $ec -ne 1 ]; then
+            echo "FAIL: expected exit code 1, got $ec"
             exit 1
           fi
+          echo "PASS: got expected exit code 1"
 
-          if [ "$status" -ne 1 ]; then
-            echo "Expected exit code 1 for diagnostics above threshold, got $status"
+      - name: Smoke — parse error (expect 2)
+        shell: bash
+        run: |
+          echo 'receivers:' > /tmp/invalid-otel.yaml
+          echo '	bad: tab' >> /tmp/invalid-otel.yaml
+          set +e
+          ./bin/oteldoctor analyze /tmp/invalid-otel.yaml
+          ec=$?
+          if [ $ec -ne 2 ]; then
+            echo "FAIL: expected exit code 2, got $ec"
             exit 1
           fi
+          echo "PASS: got expected exit code 2"
 
-      - name: Smoke test JSON output
-        run: ./bin/oteldoctor analyze --profile production --format json examples/bad/security.yaml
+      - name: Smoke — JSON output
+        shell: bash
+        run: |
+          set +e
+          ./bin/oteldoctor analyze --profile production --format json examples/bad/security.yaml > /tmp/oteldoctor.json
+          ec=$?
+          if [ $ec -ne 0 ] && [ $ec -ne 1 ]; then
+            echo "FAIL: unexpected exit code $ec for JSON output"
+            exit 1
+          fi
+          python3 -c "import json; json.load(open('/tmp/oteldoctor.json'))" || {
+            echo "FAIL: invalid JSON output"
+            exit 1
+          }
+          echo "PASS: valid JSON output"
 
-      - name: Smoke test SARIF output
-        run: ./bin/oteldoctor analyze --profile production --format sarif examples/bad/security.yaml
+      - name: Smoke — SARIF output (bad config, verify format only)
+        shell: bash
+        run: |
+          set +e
+          ./bin/oteldoctor analyze --profile production --format sarif examples/bad/security.yaml > /tmp/oteldoctor.sarif
+          ec=$?
+          if [ $ec -ne 0 ] && [ $ec -ne 1 ]; then
+            echo "FAIL: unexpected exit code $ec for SARIF output"
+            exit 1
+          fi
+          python3 -c "import json; json.load(open('/tmp/oteldoctor.sarif'))" || {
+            echo "FAIL: invalid SARIF JSON"
+            exit 1
+          }
+          echo "PASS: valid SARIF output"
 
-      - name: Smoke test graph command
-        run: ./bin/oteldoctor graph examples/good/collector-production.yaml --format mermaid
+      - name: Smoke — version
+        run: ./bin/oteldoctor version
 
-      - name: Smoke test explain command
+      - name: Smoke — explain
         run: ./bin/oteldoctor explain OTEL-SEC-202
 
-      - name: Smoke test autofix dry-run
+      - name: Smoke — graph
+        run: ./bin/oteldoctor graph examples/good/collector-production.yaml --format mermaid
+
+      - name: Smoke — autofix dry-run
         run: ./bin/oteldoctor fix examples/bad/reliability.yaml --dry-run
